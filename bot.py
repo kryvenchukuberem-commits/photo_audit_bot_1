@@ -74,5 +74,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.run_polling()
 
-if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+from telegram.ext import Application
+
+application = Application.builder().token("8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg
+").build()
