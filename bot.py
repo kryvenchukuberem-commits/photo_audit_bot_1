@@ -74,5 +74,5 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.run_polling()
 
-if name == "__main__":
+if __name__ == "__main__":
     main()
