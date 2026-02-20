@@ -26,7 +26,7 @@ def get_current_month():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Вітаю! Надішліть два актуальне фото.\n"
+        "Вітаю! Надішліть два актуальних фото.\n"
         "Повторні або старі фото не приймаються."
     )
 
