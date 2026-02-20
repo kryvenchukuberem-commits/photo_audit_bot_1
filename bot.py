@@ -35,6 +35,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.message.from_user.username
     current_month = get_current_month()
 
+    # Перевірка ліміту 2 фото на місяць
+    cursor.execute(
+        "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
+        (user_id, current_month)
+    )
+    count = cursor.fetchone()[0]
+
+    if count >= 2:
+        await update.message.reply_text(
+            "⚠️ Ви вже надіслали 2 фото цього місяця.\n"
+            "Спробуйте знову наступного місяця."
+        )
+        return
+        
     # Перевірка: чи вже здавав фото цього місяця
     cursor.execute("SELECT * FROM photos WHERE user_id=? AND month=?", (user_id, current_month))
     if cursor.fetchone():
@@ -49,26 +63,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Хеш фото
     with open(file_path, "rb") as f:
         file_hash = hashlib.sha256(f.read()).hexdigest()
-
+        
     # Перевірка повтору
     cursor.execute("SELECT * FROM photos WHERE photo_hash=?", (file_hash,))
     if cursor.fetchone():
         await update.message.reply_text("❌ Це фото вже надсилалось раніше.")
         os.remove(file_path)
-        return
-
-    # Перевірка ліміту 2 фото на місяць
-    cursor.execute(
-        "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
-        (user_id, current_month)
-    )
-    count = cursor.fetchone()[0]
-
-    if count >= 2:
-        await update.message.reply_text(
-            "⚠️ Ви вже надіслали 2 фото цього місяця.\n"
-            "Спробуйте знову наступного місяця."
-        )
         return
 
     # Зберігаємо
