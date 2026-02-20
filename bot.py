@@ -35,6 +35,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.message.from_user.username
     current_month = get_current_month()
 
+     photo = update.message.photo[-1]
+    file = await context.bot.get_file(photo.file_id)
+    file_path = f"{photo.file_id}.jpg"
+    await file.download_to_drive(file_path)
+
     # Хеш фото
     with open(file_path, "rb") as f:
         file_hash = hashlib.sha256(f.read()).hexdigest()
