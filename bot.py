@@ -26,7 +26,7 @@ def get_current_month():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Вітаю! Надішліть фото.\n"
+        "Вітаю! Надішліть не більше 2 фото за місяць.\n"
         "Повторні фото не приймаються."
     )
 
@@ -42,24 +42,40 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = update.message.photo[-1]
     file = await photo.get_file()
 
-    # Отримуємо байти фото
+    # Отримуємо байти фото (без збереження на диск)
     file_bytes = await file.download_as_bytearray()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
-    # Перевірка повторного фото
+    # 1️⃣ Перевірка повторного фото
     cursor.execute("SELECT 1 FROM photos WHERE photo_hash=?", (file_hash,))
     if cursor.fetchone():
         await update.message.reply_text("❌ Це фото вже надсилалось раніше.")
         return
 
-    # Зберігаємо фото
+    # 2️⃣ Перевірка ліміту 2 фото на місяць
+    cursor.execute(
+        "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
+        (user_id, current_month)
+    )
+    count = cursor.fetchone()[0]
+
+    if count >= 2:
+        await update.message.reply_text(
+            "⚠️ Ви вже надіслали 2 фото цього місяця.\n"
+            "Спробуйте знову наступного місяця."
+        )
+        return
+
+    # 3️⃣ Зберігаємо фото
     cursor.execute(
         "INSERT INTO photos VALUES (?, ?, ?, ?, ?)",
         (user_id, username, file_hash, current_month, datetime.now().isoformat())
     )
     conn.commit()
 
-    await update.message.reply_text("✅ Фото прийнято. Дякуємо!")
+    await update.message.reply_text(
+        f"✅ Фото прийнято! ({count + 1}/2 за цей місяць)"
+    )
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
