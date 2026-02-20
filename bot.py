@@ -27,8 +27,8 @@ def get_current_month():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Вітаю! Надішліть не більше 2 фото за місяць.\n"
-        "Повторні фото не приймаються."
-    )
+        "Повторні фото не приймаються.")
+    
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
@@ -55,27 +55,27 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 2️⃣ Перевірка ліміту 2 фото на місяць
     cursor.execute(
         "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
-        (user_id, current_month)
-    )
+        (user_id, current_month))
+    
     count = cursor.fetchone()[0]
 
     if count >= 2:
         await update.message.reply_text(
             "⚠️ Ви вже надіслали 2 фото цього місяця.\n"
-            "Спробуйте знову наступного місяця."
-        )
+            "Спробуйте знову наступного місяця.")
+        
         return
 
     # 3️⃣ Зберігаємо фото
     cursor.execute(
         "INSERT INTO photos VALUES (?, ?, ?, ?, ?)",
-        (user_id, username, file_hash, current_month, datetime.now().isoformat())
-    )
+        (user_id, username, file_hash, current_month, datetime.now().isoformat()))
+    
     conn.commit()
 
     await update.message.reply_text(
-        f"✅ Фото прийнято! ({count + 1}/2 за цей місяць)"
-    )
+        f"✅ Фото прийнято! ({count + 1}/2 за цей місяць)")
+    
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
