@@ -1,3 +1,35 @@
+import os
+import sqlite3
+import hashlib
+from datetime import datetime
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
+
+TOKEN = os.getenv("8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg")
+
+# --- Database setup ---
+conn = sqlite3.connect("photos.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS photos (
+    user_id INTEGER,
+    username TEXT,
+    photo_hash TEXT,
+    month TEXT,
+    date TEXT
+)
+""")
+conn.commit()
+
+def get_current_month():
+    return datetime.now().strftime("%Y-%m")
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Вітаю! Надішліть одне актуальне фото.\n"
+        "Повторні або старі фото не приймаються."
+    )
+
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     username = update.message.from_user.username
@@ -51,3 +83,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ Фото прийнято!\n"
             "Ліміт на цей місяць вичерпано."
         )
+        def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
