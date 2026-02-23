@@ -5,7 +5,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
-TOKEN = os.getenv("8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg")
+TOKEN = os.getenv("YOUR_TOKEN_HERE")
 
 # --- Database setup ---
 conn = sqlite3.connect("photos.db", check_same_thread=False)
