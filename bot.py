@@ -6,17 +6,14 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 import logging
 
-# --- ЛОГУВАННЯ ---
+# --- Логування ---
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
 TOKEN = "8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg"
-
-# --- Папка для збереження фото ---
-BASE_DIR = "saved_photos"
-os.makedirs(BASE_DIR, exist_ok=True)
+ADMIN_ID = https://t.me/m_alina_19
 
 # --- Database setup ---
 conn = sqlite3.connect("photos.db", check_same_thread=False)
@@ -47,7 +44,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.username or "unknown"
     current_month = get_current_month()
 
-    # Перевірка кількості фото за місяць
+    # Перевірка ліміту фото за місяць
     cursor.execute(
         "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
         (user_id, current_month)
@@ -61,18 +58,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
 
-    # --- Створюємо папку користувача ---
-    user_folder = os.path.join(BASE_DIR, str(user_id))
-    os.makedirs(user_folder, exist_ok=True)
-
-    # --- Ім'я файлу ---
-    filename = f"{current_month}_{photo_count+1}.jpg"
-    file_path = os.path.join(user_folder, filename)
-
-    # --- Завантаження ---
+    # --- Завантаження в пам'ять ---
+    file_path = f"{photo.file_id}.jpg"
     await file.download_to_drive(file_path)
 
-    # --- Хеш для перевірки дублю ---
+    # Хеш фото для перевірки дублю
     with open(file_path, "rb") as f:
         file_hash = hashlib.sha256(f.read()).hexdigest()
 
@@ -82,15 +72,21 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Це фото вже надсилалось раніше.")
         return
 
-    # --- Збереження в БД ---
+    # --- Зберігаємо в БД ---
     cursor.execute(
         "INSERT INTO photos VALUES (?, ?, ?, ?, ?)",
         (user_id, username, file_hash, current_month, datetime.now().isoformat())
     )
     conn.commit()
 
+    # --- Відправка адміну ---
+    with open(file_path, "rb") as f:
+        await context.bot.send_photo(chat_id=ADMIN_ID, photo=f, caption=f"Фото від @{username}")
+
+    os.remove(file_path)
+
     await update.message.reply_text(
-        f"✅ Фото збережено!\n"
+        f"✅ Фото надіслано адміну!\n"
         f"Використано {photo_count + 1} з 2 фото цього місяця."
     )
 
