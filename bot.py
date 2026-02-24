@@ -34,7 +34,7 @@ def get_current_month():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Вітаю! Ви можете надіслати до 2 фото на місяць.\n"
+        "Вітаю! Ви можете надіслати до 2 фото на місяць."
         "Повторні фото не приймаються."
     )
 
@@ -86,7 +86,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     os.remove(file_path)
 
     await update.message.reply_text(
-        f"✅ Фото надіслано адміну!\n"
+        f"✅ Фото надіслано адміну!"
         f"Використано {photo_count + 1} з 2 фото цього місяця."
     )
 
