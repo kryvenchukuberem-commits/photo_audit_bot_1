@@ -4,8 +4,19 @@ import hashlib
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
+import logging
 
-TOKEN = os.getenv("YOUR_TOKEN_HERE")
+# --- ЛОГУВАННЯ ---
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+
+TOKEN = "8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg"
+
+# --- Папка для збереження фото ---
+BASE_DIR = "saved_photos"
+os.makedirs(BASE_DIR, exist_ok=True)
 
 # --- Database setup ---
 conn = sqlite3.connect("photos.db", check_same_thread=False)
@@ -26,16 +37,17 @@ def get_current_month():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Вітаю! Ви можете надіслати до 2 фото на місяць."
-        "Повторні або старі фото не приймаються."
+        "Вітаю! Ви можете надіслати до 2 фото на місяць.\n"
+        "Повторні фото не приймаються."
     )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    username = update.message.from_user.username
+    user = update.message.from_user
+    user_id = user.id
+    username = user.username or "unknown"
     current_month = get_current_month()
 
-    # Перевірка: скільки фото вже надіслав користувач цього місяця
+    # Перевірка кількості фото за місяць
     cursor.execute(
         "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
         (user_id, current_month)
@@ -48,31 +60,38 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
-    file_path = f"{photo.file_id}.jpg"
+
+    # --- Створюємо папку користувача ---
+    user_folder = os.path.join(BASE_DIR, str(user_id))
+    os.makedirs(user_folder, exist_ok=True)
+
+    # --- Ім'я файлу ---
+    filename = f"{current_month}_{photo_count+1}.jpg"
+    file_path = os.path.join(user_folder, filename)
+
+    # --- Завантаження ---
     await file.download_to_drive(file_path)
 
-    # Хеш фото
+    # --- Хеш для перевірки дублю ---
     with open(file_path, "rb") as f:
         file_hash = hashlib.sha256(f.read()).hexdigest()
 
-    # Перевірка повтору
     cursor.execute("SELECT * FROM photos WHERE photo_hash=?", (file_hash,))
     if cursor.fetchone():
-        await update.message.reply_text("❌ Це фото вже надсилалось раніше.")
         os.remove(file_path)
+        await update.message.reply_text("❌ Це фото вже надсилалось раніше.")
         return
 
-    # Зберігаємо
+    # --- Збереження в БД ---
     cursor.execute(
         "INSERT INTO photos VALUES (?, ?, ?, ?, ?)",
         (user_id, username, file_hash, current_month, datetime.now().isoformat())
     )
     conn.commit()
 
-    os.remove(file_path)
-
     await update.message.reply_text(
-        f"✅ Фото прийнято! Ви надіслали {photo_count + 1} з 2 можливих фото цього місяця."
+        f"✅ Фото збережено!\n"
+        f"Використано {photo_count + 1} з 2 фото цього місяця."
     )
 
 def main():
