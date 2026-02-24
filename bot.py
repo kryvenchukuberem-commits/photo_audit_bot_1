@@ -26,7 +26,7 @@ def get_current_month():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Вітаю! Надішліть одне актуальне фото.\n"
+        "Вітаю! Ви можете надіслати до 2 фото на місяць."
         "Повторні або старі фото не приймаються."
     )
 
@@ -35,10 +35,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.message.from_user.username
     current_month = get_current_month()
 
-    # Перевірка: чи вже здавав фото цього місяця
-    cursor.execute("SELECT * FROM photos WHERE user_id=? AND month=?", (user_id, current_month))
-    if cursor.fetchone():
-        await update.message.reply_text("❌ Ви вже здали фото цього місяця.")
+    # Перевірка: скільки фото вже надіслав користувач цього місяця
+    cursor.execute(
+        "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
+        (user_id, current_month)
+    )
+    photo_count = cursor.fetchone()[0]
+
+    if photo_count >= 2:
+        await update.message.reply_text("❌ Ви вже надіслали 2 фото цього місяця.")
         return
 
     photo = update.message.photo[-1]
@@ -66,7 +71,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     os.remove(file_path)
 
-    await update.message.reply_text("✅ Фото прийнято. Дякуємо!")
+    await update.message.reply_text(
+        f"✅ Фото прийнято! Ви надіслали {photo_count + 1} з 2 можливих фото цього місяця."
+    )
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -74,5 +81,5 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.run_polling()
 
-if name == "__main__":
+if __name__ == "__main__":
     main()
