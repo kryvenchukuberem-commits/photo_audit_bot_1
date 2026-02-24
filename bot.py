@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 
 TOKEN = "8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg"
-ADMIN_ID = https://t.me/m_alina_19
+ADMIN_ID = "757830059"
 
 # --- Database setup ---
 conn = sqlite3.connect("photos.db", check_same_thread=False)
