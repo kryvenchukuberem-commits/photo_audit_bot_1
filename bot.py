@@ -16,12 +16,11 @@ SPREADSHEET_ID = "1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY"
 # ------------------- Google підключення -------------------
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+    "https://www.googleapis.com/auth/drive"]
 
 creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
 client = gspread.authorize(creds)
-sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+sheet = client.open_by_key(1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY).sheet1
 
 # ------------------- Допоміжні -------------------
 def normalize_phone(phone):
