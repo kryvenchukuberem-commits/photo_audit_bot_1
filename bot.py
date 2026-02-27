@@ -1,4 +1,5 @@
 import os
+import json
 import hashlib
 from datetime import datetime
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
@@ -7,51 +8,58 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
 )
+
 import gspread
 from google.oauth2.service_account import Credentials
 
-# ------------------- Налаштування -------------------
-TOKEN = "8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg"
-ADMIN_ID = 1060311805
-SPREADSHEET_ID = "1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY"
 
-# ------------------- Google підключення -------------------
+# ------------------- ENV -------------------
+TOKEN = os.getenv("8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg")
+ADMIN_ID = int(os.getenv("1060311805"))
+SPREADSHEET_ID = os.getenv("1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY")
+
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
-
-import json
 
 creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SPREADSHEET_ID).sheet1
 
-# ------------------- Допоміжні -------------------
-def get_all_records():
-    return sheet.get_all_records()
 
-def get_col_index(col_name):
-    headers = sheet.row_values(1)
-    return headers.index(col_name) + 1
+# ------------------- Допоміжні -------------------
+
+def get_headers():
+    return sheet.row_values(1)
+
+def get_col(name):
+    return get_headers().index(name) + 1
+
+def get_all():
+    return sheet.get_all_records()
 
 def normalize_phone(phone):
     return phone.replace(" ", "").replace("-", "")
 
+
 # ------------------- START -------------------
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     button = KeyboardButton("Поділитися номером", request_contact=True)
-    keyboard = ReplyKeyboardMarkup([[button]], resize_keyboard=True, one_time_keyboard=True)
+    keyboard = ReplyKeyboardMarkup([[button]], resize_keyboard=True)
 
     await update.message.reply_text(
-        "Натисніть кнопку щоб поділитися номером телефону.",
+        "Натисніть кнопку щоб поділитися номером телефону",
         reply_markup=keyboard
     )
 
-# ------------------- Реєстрація -------------------
+
+# ------------------- КОНТАКТ -------------------
+
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     contact = update.message.contact
@@ -61,100 +69,103 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.username or ""
     name = user.first_name or ""
 
-    records = get_all_records()
+    records = get_all()
 
-    for index, row in enumerate(records, start=2):
+    for i, row in enumerate(records, start=2):
         if normalize_phone(str(row["телефон"])) == phone:
-            sheet.update_cell(index, get_col_index("телеграм_ник"), username)
-            sheet.update_cell(index, get_col_index("айді"), user_id)
-            await update.message.reply_text("✅ Реєстрація успішна.")
+            sheet.update_cell(i, get_col("телеграм_ник"), username)
+            sheet.update_cell(i, get_col("айді"), user_id)
+            await update.message.reply_text("✅ Реєстрація оновлена")
             return
 
-    # якщо номера немає — додаємо нового користувача
     sheet.append_row([name, phone, username, user_id, "", "", ""])
-    await update.message.reply_text("✅ Ви додані до системи.")
+    await update.message.reply_text("✅ Ви додані в систему")
 
-# ------------------- Фото -------------------
+
+# ------------------- ФОТО -------------------
+
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = user.id
     username = user.username or ""
     name = user.first_name or ""
 
-    records = get_all_records()
+    records = get_all()
     user_row = None
 
-    for index, row in enumerate(records, start=2):
-        if row["айді"] == user_id:
-            user_row = index
+    for i, row in enumerate(records, start=2):
+        if str(row["айді"]) == str(user_id):
+            user_row = i
             break
 
     if not user_row:
         sheet.append_row([name, "", username, user_id, "", "", ""])
         user_row = len(records) + 2
 
-    # Перевірка двох фото на місяць
+    # ліміт 2 фото на місяць
     current_month = datetime.now().strftime("%Y-%m")
-    count_this_month = 0
+    count = 0
     for row in records:
-        if str(row["айді"]) == str(user_id) and row["дата_останнього_фото"].startswith(current_month):
-            count_this_month += 1
-    if count_this_month >= 2:
-        await update.message.reply_text("❌ Ви вже надіслали 2 фото цього місяця.")
+        if str(row["айді"]) == str(user_id):
+            if row["дата_останнього_фото"].startswith(current_month):
+                count += 1
+
+    if count >= 2:
+        await update.message.reply_text("❌ Ліміт 2 фото на місяць")
         return
 
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
-    file_path = f"{photo.file_id}.jpg"
-    await file.download_to_drive(file_path)
+    path = f"{photo.file_id}.jpg"
+    await file.download_to_drive(path)
 
-    with open(file_path, "rb") as f:
+    with open(path, "rb") as f:
         file_hash = hashlib.sha256(f.read()).hexdigest()
 
-    # Перевірка дубля
+    # перевірка дубля
     for row in records:
         if row["хеш_фото"] == file_hash:
-            os.remove(file_path)
-            await update.message.reply_text("❌ Це фото вже надсилалось.")
+            os.remove(path)
+            await update.message.reply_text("❌ Фото вже надсилалось")
             return
 
-    # Оновлюємо таблицю
-    sheet.update_cell(user_row, get_col_index("дата_останнього_фото"), datetime.now().isoformat())
-    sheet.update_cell(user_row, get_col_index("статус_фото"), "+")
-    sheet.update_cell(user_row, get_col_index("хеш_фото"), file_hash)
+    sheet.update_cell(user_row, get_col("дата_останнього_фото"), datetime.now().isoformat())
+    sheet.update_cell(user_row, get_col("статус_фото"), "+")
+    sheet.update_cell(user_row, get_col("хеш_фото"), file_hash)
 
-    # Відправка адміну
-    with open(file_path, "rb") as f:
+    with open(path, "rb") as f:
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=f,
             caption=f"📸 Фото від @{username}"
         )
 
-    os.remove(file_path)
-    await update.message.reply_text(f"✅ Фото прийнято. Використано {count_this_month + 1}/2 цього місяця.")
+    os.remove(path)
 
-# ------------------- Нагадування -------------------
-async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
-    records = get_all_records()
+    await update.message.reply_text("✅ Фото прийнято")
+
+
+# ------------------- НАГАДУВАННЯ -------------------
+
+async def reminder(context: ContextTypes.DEFAULT_TYPE):
+    records = get_all()
     today = datetime.now()
 
     for row in records:
-        uid = row["айді"]
-        last_date = row["дата_останнього_фото"]
-
-        if uid and last_date:
-            last = datetime.fromisoformat(last_date)
+        if row["айді"] and row["дата_останнього_фото"]:
+            last = datetime.fromisoformat(row["дата_останнього_фото"])
             if (today - last).days >= 30:
                 try:
                     await context.bot.send_message(
-                        chat_id=uid,
-                        text="📢 Нагадування: надішліть нове фото."
+                        chat_id=int(row["айді"]),
+                        text="📢 Нагадування: надішліть нове фото"
                     )
                 except:
                     pass
 
-# ------------------- Запуск -------------------
+
+# ------------------- ЗАПУСК -------------------
+
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -162,10 +173,10 @@ def main():
     app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    # Нагадування кожні 24 години
-    app.job_queue.run_repeating(reminder_job, interval=86400, first=10)
+    app.job_queue.run_repeating(reminder, interval=86400, first=10)
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
