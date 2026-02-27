@@ -20,7 +20,7 @@ scope = [
 
 creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
 client = gspread.authorize(creds)
-sheet = client.open_by_key(1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY).sheet1
+sheet = client.open_by_key(SPREADSHEET_ID).sheet1
 
 # ------------------- Допоміжні -------------------
 def normalize_phone(phone):
