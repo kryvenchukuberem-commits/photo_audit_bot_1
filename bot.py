@@ -17,7 +17,7 @@ from google.oauth2.service_account import Credentials
 
 # ------------------- ENV -------------------
 TOKEN = os.getenv("8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg")
-ADMIN_ID = int(os.getenv("1060311805")
+ADMIN_ID = 1060311805
 SPREADSHEET_ID = os.getenv("1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY")
 
 scope = [
