@@ -13,9 +13,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ------------------- Налаштування -------------------
-TOKEN = "ТУТ_ВСТАВ_СВІЙ_ТОКЕН"
-ADMIN_ID = 123456789
-SPREADSHEET_ID = "ТУТ_ID_ТАБЛИЦІ"
+TOKEN = "8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg"
+ADMIN_ID = 1060311805
+SPREADSHEET_ID = "1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY"
 
 # ------------------- Google підключення -------------------
 scope = [
