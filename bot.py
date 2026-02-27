@@ -1,99 +1,171 @@
 import os
-import sqlite3
 import hashlib
+import asyncio
 from datetime import datetime
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
-import logging
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import gspread
+from google.oauth2.service_account import Credentials
 
-# --- Логування ---
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-
+# ------------------- Налаштування -------------------
 TOKEN = "8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg"
-ADMIN_ID = "1060311805"
+ADMIN_ID = 1060311805
+SPREADSHEET_ID = "1A5nSVtca1DK6wKnmSZC79LMcM5e0_FBxJINGcxYqjDY"
 
-# --- Database setup ---
-conn = sqlite3.connect("photos.db", check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS photos (
-    user_id INTEGER,
-    username TEXT,
-    photo_hash TEXT,
-    month TEXT,
-    date TEXT
-)
-""")
-conn.commit()
+# ------------------- Google підключення -------------------
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
-def get_current_month():
-    return datetime.now().strftime("%Y-%m")
+creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key(SPREADSHEET_ID).sheet1
 
+# ------------------- Допоміжні -------------------
+def normalize_phone(phone):
+    return phone.replace(" ", "").replace("-", "")
+
+def get_all_records():
+    return sheet.get_all_records()
+
+def get_col_index(col_name):
+    headers = sheet.row_values(1)
+    return headers.index(col_name) + 1
+
+# ------------------- START -------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    button = KeyboardButton("Поділитися номером", request_contact=True)
+    keyboard = ReplyKeyboardMarkup([[button]], resize_keyboard=True, one_time_keyboard=True)
+
     await update.message.reply_text(
-        "Вітаю! Ви можете надіслати до 2 фото на місяць."
-        "Повторні фото не приймаються."
+        "Натисніть кнопку щоб поділитися номером телефону.",
+        reply_markup=keyboard
     )
 
+# ------------------- Реєстрація -------------------
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    contact = update.message.contact
+
+    phone = normalize_phone(contact.phone_number)
+    user_id = user.id
+    username = user.username or ""
+    name = user.first_name or ""
+
+    records = get_all_records()
+
+    for index, row in enumerate(records, start=2):
+        if normalize_phone(str(row["телефон"])) == phone:
+            sheet.update_cell(index, get_col_index("телеграм_ник"), username)
+            sheet.update_cell(index, get_col_index("айді"), user_id)
+            await update.message.reply_text("✅ Реєстрація успішна.")
+            return
+
+    # якщо номера немає — додаємо нового користувача
+    sheet.append_row([name, phone, username, user_id, "", "", ""])
+    await update.message.reply_text("✅ Ви додані до системи.")
+
+# ------------------- Фото -------------------
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = user.id
-    username = user.username or "unknown"
-    current_month = get_current_month()
+    username = user.username or ""
+    name = user.first_name or ""
 
-    # Перевірка ліміту фото за місяць
-    cursor.execute(
-        "SELECT COUNT(*) FROM photos WHERE user_id=? AND month=?",
-        (user_id, current_month)
-    )
-    photo_count = cursor.fetchone()[0]
+    records = get_all_records()
+    user_row = None
 
-    if photo_count >= 2:
-        await update.message.reply_text("❌ Ви вже надіслали 2 фото цього місяця.")
-        return
+    for index, row in enumerate(records, start=2):
+        if row["айді"] == user_id:
+            user_row = index
+            break
+
+    if not user_row:
+        # якщо користувач не реєструвався
+        sheet.append_row([name, "", username, user_id, "", "", ""])
+        user_row = len(records) + 2
 
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
-
-    # --- Завантаження в пам'ять ---
     file_path = f"{photo.file_id}.jpg"
     await file.download_to_drive(file_path)
 
-    # Хеш фото для перевірки дублю
     with open(file_path, "rb") as f:
         file_hash = hashlib.sha256(f.read()).hexdigest()
 
-    cursor.execute("SELECT * FROM photos WHERE photo_hash=?", (file_hash,))
-    if cursor.fetchone():
-        os.remove(file_path)
-        await update.message.reply_text("❌ Це фото вже надсилалось раніше.")
-        return
+    # перевірка дубля
+    if records and user_row - 2 < len(records):
+        if records[user_row - 2]["хеш_фото"] == file_hash:
+            os.remove(file_path)
+            await update.message.reply_text("❌ Це фото вже надсилалось.")
+            return
 
-    # --- Зберігаємо в БД ---
-    cursor.execute(
-        "INSERT INTO photos VALUES (?, ?, ?, ?, ?)",
-        (user_id, username, file_hash, current_month, datetime.now().isoformat())
-    )
-    conn.commit()
+    # оновлення таблиці
+    sheet.update_cell(user_row, get_col_index("дата_останнього_фото"), datetime.now().isoformat())
+    sheet.update_cell(user_row, get_col_index("статус_фото"), "+")
+    sheet.update_cell(user_row, get_col_index("хеш_фото"), file_hash)
 
-    # --- Відправка адміну ---
+    # відправка адміну
     with open(file_path, "rb") as f:
-        await context.bot.send_photo(chat_id=ADMIN_ID, photo=f, caption=f"Фото від @{username}")
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID,
+            photo=f,
+            caption=f"📸 Фото від @{username}"
+        )
 
     os.remove(file_path)
+    await update.message.reply_text("✅ Фото прийнято.")
 
-    await update.message.reply_text(
-        f"✅ Фото надіслано адміну!"
-        f"Використано {photo_count + 1} з 2 фото цього місяця."
-    )
+# ------------------- Нагадування -------------------
+async def send_reminders(context: ContextTypes.DEFAULT_TYPE):
+    records = get_all_records()
+    today = datetime.now()
 
+    for row in records:
+        uid = row["айді"]
+        last_date = row["дата_останнього_фото"]
+
+        if uid and last_date:
+            last = datetime.fromisoformat(last_date)
+            if (today - last).days >= 30:
+                try:
+                    await context.bot.send_message(
+                        chat_id=uid,
+                        text="📢 Нагадування: надішліть нове фото."
+                    )
+                except:
+                    pass
+
+# ------------------- Очистка через 60 днів -------------------
+async def clean_old_data():
+    records = get_all_records()
+    today = datetime.now()
+
+    for index, row in enumerate(records, start=2):
+        last_date = row["дата_останнього_фото"]
+
+        if last_date:
+            last = datetime.fromisoformat(last_date)
+            if (today - last).days > 60:
+                sheet.update_cell(index, get_col_index("дата_останнього_фото"), "")
+                sheet.update_cell(index, get_col_index("статус_фото"), "")
+                sheet.update_cell(index, get_col_index("хеш_фото"), "")
+
+# ------------------- Запуск -------------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(lambda: asyncio.create_task(send_reminders(app)), 'interval', hours=24)
+    scheduler.add_job(lambda: asyncio.create_task(clean_old_data()), 'interval', hours=24)
+    scheduler.start()
+
     app.run_polling()
 
 if __name__ == "__main__":
