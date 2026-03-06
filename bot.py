@@ -27,19 +27,15 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# ================== GOOGLE SHEETS ПІДКЛЮЧЕННЯ ==================
+# ================== GOOGLE SHEETS ==================
 
-json_creds_str = os.environ.get("GOOGLE_CREDENTIALS")
+creds = Credentials.from_service_account_file(
+    "sanguine-healer-489208-m7-612b7cd695cb.json",
+    scopes=scope
+)
 
-if not json_creds_str:
-    raise Exception("Не знайдено змінну середовища GOOGLE_CREDENTIALS")
-
-json_creds = json.loads(json_creds_str)
-creds = Credentials.from_service_account_info(json_creds, scopes=scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-
-print("✅ Google Sheets підключено")
 
 # ================== ДОПОМІЖНІ ==================
 
