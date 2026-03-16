@@ -11,8 +11,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 # ------------------- Налаштування -------------------
-TOKEN = "ТУТ_ВСТАВ_СВІЙ_ТОКЕН"
-ADMIN_ID = 123456789  # твій Telegram ID
+TOKEN = "8460126618:AAGXWc7PmSDn5oiW5sKDXb7EogVqQ-P9NJg"
+ADMIN_ID = 1060311805
 
 
 # ------------------- Папка для фото -------------------
